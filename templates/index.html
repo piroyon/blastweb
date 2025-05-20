@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>BLAST検索</title></head>
+<body>
+  <h1>BLAST+</h1>
+
+  {% if error %}
+    <p style="color: red;">{{ error }}</p>
+  {% endif %}
+
+  <form method="post">
+    <label>FASTA format:</label><br>
+    <textarea name="sequence" rows="10" cols="70">{{ request.form.sequence or '' }}</textarea><br><br>
+
+    <label>BLAST program:</label>
+    <select name="program">
+      {% for prog in ['blastn', 'blastp', 'blastx', 'tblastn', 'tblastx'] %}
+        <option value="{{ prog }}" {% if request.form.program == prog %}selected{% endif %}>{{ prog }}</option>
+      {% endfor %}
+    </select><br><br>
+
+    <label>Database:</label>
+    <select name="database">
+  	{% for db in db_choices %}
+    	<option value="{{ db }}" {% if request.form.database == db %}selected{% endif %}>{{ db }}</option>
+  	{% endfor %}
+    </select><br><br>
+
+    <label>E-value cut off:</label>
+    <input type="text" name="evalue" value="{{ request.form.evalue or '1e-5' }}"><br><br>
+
+    <label>Max_target_seqs:</label>
+    <input type="number" name="max_target_seqs" value="{{ request.form.max_target_seqs or '50' }}"><br><br>
+
+    <label>Scoring Matrix (blastp/blastx):</label>
+    <select name="matrix">
+  	<option value="">-- Auto --</option>
+  	{% for mat in ['BLOSUM62', 'BLOSUM80', 'PAM30', 'PAM70'] %}
+    	<option value="{{ mat }}" {% if request.form.matrix == mat %}selected{% endif %}>{{ mat }}</option>
+  	{% endfor %}
+    </select><br><br>
+    <label>Extra Options... （ex: -soft_masking true -word_size 11）:</label><br>
+    <input type="text" name="extra_args" size="80" value="{{ request.form.extra_args or default_extra_args }}"><br><br>
+
+
+    <input type="submit" value="実行">
+  </form>
+</body>
+</html>
+

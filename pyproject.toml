@@ -1,0 +1,20 @@
+[project]
+name = "blastweb"
+version = "0.1.0"
+description = "A simple web UI and API for running BLAST against local databases."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+  {name = "Hiroyo NISHIDE", email = "hiroyo@nibb.ac.jp"}
+]
+dependencies = [
+  "Flask>=2.0",
+  "click>=8.0",
+  "PyYAML>=6.0",
+  "shlex"
+]
+
+[project.scripts]
+blastweb = "blastweb.cli:runserver"
+

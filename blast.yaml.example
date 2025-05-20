@@ -1,0 +1,6 @@
+#blast_path: /usr/local/ncbi/blast+/bin
+blast_path: /bio/package/blast+/ncbi-blast-2.16.0+/bin
+blast_db: /db/project/inewt/blastdb
+
+#default_extra_args: "-soft_masking true -word_size 11"
+default_extra_args: ""

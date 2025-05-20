@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>BLAST結果</title></head>
+<body>
+  <h1>BLAST結果</h1>
+
+  {% if results %}
+    <table border="1" cellpadding="5">
+      <thead>
+        <tr>
+          <th>Query</th><th>Subject</th><th>%ID</th><th>Length</th><th>Mismatches</th>
+          <th>Gaps</th><th>Q.start</th><th>Q.end</th><th>S.start</th><th>S.end</th>
+          <th>E-value</th><th>Bit score</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in results %}
+          <tr>{% for val in row %}<td>{{ val }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>ヒットは見つかりませんでした。</p>
+  {% endif %}
+
+  <a href="/">戻る</a>
+</body>
+</html>
+

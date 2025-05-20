@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+blastweb.egg-info/PKG-INFO
+blastweb.egg-info/SOURCES.txt
+blastweb.egg-info/dependency_links.txt
+blastweb.egg-info/entry_points.txt
+blastweb.egg-info/requires.txt
+blastweb.egg-info/top_level.txt

@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: blastweb
+Version: 0.1.0
+Summary: A simple web UI and API for running BLAST against local databases.
+Author-email: Hiroyo NISHIDE <hiroyo@nibb.ac.jp>
+License: MIT
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: Flask>=2.0
+Requires-Dist: click>=8.0
+Requires-Dist: PyYAML>=6.0

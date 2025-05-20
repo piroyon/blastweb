@@ -1,0 +1,2 @@
+[console_scripts]
+blastweb = blastweb.cli:runserver
