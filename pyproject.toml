@@ -11,8 +11,7 @@ authors = [
 dependencies = [
   "Flask>=2.0",
   "click>=8.0",
-  "PyYAML>=6.0",
-  "shlex"
+  "PyYAML>=6.0"
 ]
 
 [project.scripts]
