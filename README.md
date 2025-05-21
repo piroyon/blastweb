@@ -4,6 +4,13 @@ Local BLAST search via Web UI and REST API using Flask.
 
 ---
 
+## 🐍 Requirements
+
+- Python 3.8 over
+- NCBI BLAST+（ include `makeblastdb`）
+  - BLAST+ can be downloaded from here https://blast.ncbi.nlm.nih.gov/doc/blast-help/downloadblastdata.html
+
+
 ## 📦 Installation
 
 ```bash
