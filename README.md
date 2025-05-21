@@ -48,9 +48,15 @@ POST to ```/api/blast``` with JSON:
 {
   "sequence": "ATGGCGTACGTAGC",
   "program": "blastn",
-  "database": "nt",
+  "database": "mydb",
   "extra_args": "-word_size 11"
 }
+```
+Command:
+```bash
+curl -X POST http://localhost:5000/api/blast \
+  -H "Content-Type: application/json" \
+  -d '{"sequence": "ATGGCGTACGTAGC", "program": "blastn", "database": "mydb"}'
 ```
 Response (tsv lines split into array of columns):
 ```json
