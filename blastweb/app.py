@@ -15,7 +15,6 @@ DEFAULT_PROGRAM = "blastn"
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-print("現在地:{}".format(os.getcwd()))
 
 
 @app.route("/", methods=["GET", "POST"])
@@ -36,7 +35,7 @@ def index():
         extra_args = request.form.get("extra_args", "")
 
         if not sequence:
-            return render_template("index.html", error="配列が入力されていません")
+            return render_template("index.html", error="No query sequence")
 
         result_lines, error = run_blast(sequence, program, db, evalue, max_target_seqs, matrix, extra_args)
         if error:
@@ -73,7 +72,7 @@ def api_blast():
     sequence = data.get("sequence", "").strip()
     program = data.get("program", DEFAULT_PROGRAM)
     db = data.get("database", DEFAULT_DB)
-    evalue = data.get("evalue", "1e-5")
+    evalue = data.get("evalue", "1e-3")
     max_target_seqs = data.get("max_target_seqs", "50")
     matrix = data.get("matrix", "")
     extra_args = data.get("extra_args", "")
@@ -88,6 +87,8 @@ def api_blast():
 
     return jsonify({"results": result_lines})
 
+if __name__ == "__main__":
+    app.run(debug=True)
 
 import shlex
 
@@ -119,7 +120,7 @@ def run_blast(sequence, program, db_name, evalue="1e-5", max_target_seqs="50", m
                 try:
                     cmd += shlex.split(extra_args)
                 except Exception as e:
-                    return [], f"追加オプションの解析に失敗しました: {e}"
+                    return [], f"Failed to parse additional options.: {e}"
             else:
                 extra_args = config.get("default_extra_args", "")
 
@@ -142,13 +143,13 @@ def load_config(config_path=None):
         path = os.path.join(module_dir, "blast.yaml")
 
     if not os.path.exists(path):
-        raise FileNotFoundError(f"blast.yaml が見つかりません: {path}")
+        raise FileNotFoundError(f"blast.yaml not found: {path}")
 
     with open(path) as f:
         config = yaml.safe_load(f)
 
     if "blast_db" not in config:
-        raise ValueError("blast.yaml に 'blast_db' の設定が必要です。")
+        raise ValueError("Need to set 'blast_db' in blast.yaml")
     if "blast_path" not in config:
         config["blast_path"] = ""
     if "default_extra_args" not in config:
@@ -166,13 +167,12 @@ def get_blast_command(program, config=None):
             return full_path
 
     raise FileNotFoundError(
-        f"BLASTコマンド '{program}' が見つかりません。\n"
-        f"blast.yaml に blast_path: /your/blast/bin を指定してください。"
+        f"BLAST+ command '{program}' not found\n"
+        f"Specify blast_path: /your/blast/bin in 'blast.yaml.'"
     )
 
 def list_blast_databases(db_dir):
     files = os.listdir(db_dir)
-    # よくあるBLAST DBの拡張子（nucleotide/protein共通）
     exts = ('.nin', '.nsq', '.nhr', '.pin', '.psq', '.phr')
     pattern = re.compile(r"^(.+)\.(nin|nsq|nhr|pin|psq|phr)$")
 
