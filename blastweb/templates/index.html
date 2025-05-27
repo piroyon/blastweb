@@ -1,49 +1,119 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>BLAST検索</title></head>
+<head>
+  <meta charset="utf-8">
+  <title>BLAST検索</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f9fafb;
+      padding: 2em;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+      color: #1d4ed8;
+    }
+    form {
+      max-width: 700px;
+      margin: auto;
+      background: #ffffff;
+      padding: 2em;
+      border-radius: 8px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      margin-top: 1em;
+      font-weight: bold;
+    }
+    textarea, input[type="text"], input[type="number"], select {
+      width: 100%;
+      padding: 0.6em;
+      margin-top: 0.3em;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-family: inherit;
+    }
+    input[type="submit"] {
+      margin-top: 2em;
+      padding: 0.7em 1.5em;
+      background: #1d4ed8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    input[type="submit"]:hover {
+      background: #2563eb;
+    }
+    input[type="reset"] {
+      margin-top: 2em;
+      padding: 0.7em 1.5em;
+      background: #9ea1a3;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    input[type="reset"]:hover {
+      background: #c0c6c9;
+    }
+
+    .error {
+      color: red;
+      text-align: center;
+      margin-bottom: 1em;
+    }
+  </style>
+</head>
 <body>
   <h1>BLAST+</h1>
 
   {% if error %}
-    <p style="color: red;">{{ error }}</p>
+    <div class="error">{{ error }}</div>
   {% endif %}
 
   <form method="post">
-    <label>FASTA format:</label><br>
-    <textarea name="sequence" rows="10" cols="70">{{ request.form.sequence or '' }}</textarea><br><br>
+    <label>FASTA format</label>
+    <textarea name="sequence" rows="10" placeholder=">query1&#10;ATGCGT...">{{ request.form.sequence or '' }}</textarea>
 
-    <label>BLAST program:</label>
+    <label>BLAST+ program</label>
     <select name="program">
       {% for prog in ['blastn', 'blastp', 'blastx', 'tblastn', 'tblastx'] %}
         <option value="{{ prog }}" {% if request.form.program == prog %}selected{% endif %}>{{ prog }}</option>
       {% endfor %}
-    </select><br><br>
+    </select>
 
-    <label>Database:</label>
+    <label>Database</label>
     <select name="database">
-  	{% for db in db_choices %}
-    	<option value="{{ db }}" {% if request.form.database == db %}selected{% endif %}>{{ db }}</option>
-  	{% endfor %}
-    </select><br><br>
+      {% for db in db_choices %}
+        <option value="{{ db }}" {% if request.form.database == db %}selected{% endif %}>{{ db }}</option>
+      {% endfor %}
+    </select>
 
-    <label>E-value cut off:</label>
-    <input type="text" name="evalue" value="{{ request.form.evalue or '1e-5' }}"><br><br>
+    <label>E-value</label>
+    <input type="text" name="evalue" value="{{ request.form.evalue or '1e-5' }}">
 
-    <label>Max_target_seqs:</label>
-    <input type="number" name="max_target_seqs" value="{{ request.form.max_target_seqs or '50' }}"><br><br>
+    <label>Max target seqs</label>
+    <input type="number" name="max_target_seqs" value="{{ request.form.max_target_seqs or '50' }}">
 
-    <label>Scoring Matrix (blastp/blastx):</label>
+    <label>Score Matrix (blastp/blastx)</label>
     <select name="matrix">
-  	<option value="">-- Auto --</option>
-  	{% for mat in ['BLOSUM62', 'BLOSUM80', 'PAM30', 'PAM70'] %}
-    	<option value="{{ mat }}" {% if request.form.matrix == mat %}selected{% endif %}>{{ mat }}</option>
-  	{% endfor %}
-    </select><br><br>
-    <label>Extra Options... （ex: -soft_masking true -word_size 11）:</label><br>
-    <input type="text" name="extra_args" size="80" value="{{ request.form.extra_args or default_extra_args }}"><br><br>
+      <option value="">-- Auto --</option>
+      {% for mat in ['BLOSUM62', 'BLOSUM80', 'PAM30', 'PAM70'] %}
+        <option value="{{ mat }}" {% if request.form.matrix == mat %}selected{% endif %}>{{ mat }}</option>
+      {% endfor %}
+    </select>
 
+    <label>Additional Options</label>
+    <input type="text" name="extra_args" value="{{ request.form.extra_args or default_extra_args }}">
 
-    <input type="submit" value="実行">
+    <input type="submit" value="BLAST">
+    <input type="reset" value="reset">
   </form>
 </body>
 </html>

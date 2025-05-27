@@ -1,29 +1,118 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>BLAST結果</title></head>
+<head>
+  <meta charset="utf-8">
+  <title>BLAST+ Results</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f9fafb;
+      padding: 2em;
+      color: #333;
+    }
+
+    h1 {
+      text-align: center;
+      color: #1d4ed8;
+      margin-bottom: 1em;
+    }
+
+    .result-container {
+      max-width: 95%;
+      margin: auto;
+      background: #ffffff;
+      padding: 1.5em;
+      border-radius: 8px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.1);
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9em;
+    }
+
+    th {
+      background-color: #e0e7ff;
+      color: #111827;
+      font-weight: bold;
+      padding: 0.6em;
+      border-bottom: 2px solid #c7d2fe;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 0.5em;
+      border-bottom: 1px solid #e5e7eb;
+      white-space: nowrap;
+    }
+
+    tr:hover {
+      background-color: #f3f4f6;
+    }
+
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 2em;
+    }
+
+    .back-link a {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    .back-link a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
 <body>
-  <h1>BLAST結果</h1>
+  <h1>BLAST+ Search Results</h1>
 
-  {% if results %}
-    <table border="1" cellpadding="5">
-      <thead>
-        <tr>
-          <th>Query</th><th>Subject</th><th>%ID</th><th>Length</th><th>Mismatches</th>
-          <th>Gaps</th><th>Q.start</th><th>Q.end</th><th>S.start</th><th>S.end</th>
-          <th>E-value</th><th>Bit score</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in results %}
-          <tr>{% for val in row %}<td>{{ val }}</td>{% endfor %}</tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p>ヒットは見つかりませんでした。</p>
-  {% endif %}
+  <div class="result-container">
+    {% if results %}
+      <table>
+        <thead>
+          <tr>
+            <th>Query</th>
+            <th>Subject</th>
+            <th>% Identity</th>
+            <th>Alignment Length</th>
+            <th>Mismatches</th>
+            <th>Gaps</th>
+            <th>Q. Start</th>
+            <th>Q. End</th>
+            <th>S. Start</th>
+            <th>S. End</th>
+            <th>E-value</th>
+            <th>Bit Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in results %}
+            <tr>{% for val in row %}
+	       <td>
+		 {% if loop.index0 == 1 %}
+		    <a href="/subject/{{ selected_db }}/{{ val }}">{{ val }}</a>
+                 {% else %} {{ val }}
+	         {% endif %}
+	       </td>
+	     {% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>No hits found.</p>
+    {% endif %}
+  </div>
 
-  <a href="/">戻る</a>
+  <div class="back-link">
+    <a href="/">← Back to Search</a>
+  </div>
 </body>
 </html>
 

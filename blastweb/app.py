@@ -42,9 +42,29 @@ def index():
         if error:
             return render_template("index.html", error=error)
 
-        return render_template("result.html", results=result_lines)
+        return render_template("result.html", results=result_lines, selected_db=db)
 
     return render_template("index.html", default_extra_args=default_extra_args, db_choices=available_dbs)
+
+
+@app.route("/subject/<db>/<subject_id>")
+def get_subject_sequence(db, subject_id):
+    config = load_config()
+    program = "blastdbcmd"
+    cmd_path = get_blast_command(program, config)
+    db_dir = config["blast_db"]
+    db_path = os.path.join(db_dir, db)
+
+    try:
+        result = subprocess.run(
+            [cmd_path, "-db", db_path, "-entry", subject_id],
+            check=True, capture_output=True, text=True
+        )
+        fasta = result.stdout
+    except subprocess.CalledProcessError as e:
+        return f"<p>Failed to fetch entry '{subject_id}' from database '{db}': {e.stderr}</p>", 500
+
+    return f"<pre>{fasta}</pre>"
 
 
 @app.route("/api/blast", methods=["POST"])
