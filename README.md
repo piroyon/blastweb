@@ -13,12 +13,20 @@ Local BLAST search via Web UI and REST API using Flask.
 
 ### 📦 Installation
 
+Prepare venv: (Highly recommended)
 ```bash
 python -m venv my_blastweb
 source my_blastweb/bin/activate
-git clone https://github.com/<yourname>/blastweb.git
+```
+from github:
+```
+git clone https://github.com/piroyon/blastweb.git
 cd blastweb
 pip install -e .
+```
+or, use pip:
+```
+pip install blastweb
 ```
 
 ### ⚙️ Configuration
