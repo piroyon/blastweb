@@ -22,8 +22,9 @@ pip install -e .
 ```
 
 ### ⚙️ Configuration
+Create a config file 'blast.yaml' in the current directory
 ```bash
-cp blast.yaml.example blast.yaml
+blastweb init
 ```
 Edit blast.yaml
 ```
@@ -41,7 +42,7 @@ default_extra_args: "-soft_masking true -word_size 11"
 Start the web server:
 ```bash
 cd <blastweb_topdir>
-blastweb --port 5000
+blastweb runserver --port 5000 --config /path/to/blast.yaml
 ```
 Then open http://localhost:5000 in your browser.
 
@@ -88,7 +89,7 @@ pip install gunicorn
 ```
 #### Step 2: Start blastweb with gunicorn
 ````bash
-gunicorn blastweb.app:app --bind 127.0.0.1:5000
+BLASTWEB_CONFIG=/path/to/blast.yaml gunicorn blastweb.wsgi:app --bind 127.0.0.1:5000
 ````
 #### Step 3: Configure nginx (external to this project)
 a minimal nginx config:

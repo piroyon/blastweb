@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, jsonify
+from flask import request, render_template, jsonify, current_app
 import subprocess
 import tempfile
 import os
@@ -7,95 +7,93 @@ import yaml
 import shlex
 import re
 
-app = Flask(__name__)
+def register_routes(app):
 
-DEFAULT_DB = "/data/blastdb"
-DEFAULT_PROGRAM = "blastn"
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+    DEFAULT_PROGRAM = 'blastn'
+
+    @app.route("/", methods=["GET", "POST"])
+    def index():
+        #return "<h1>Hello from Flask</h1>"
+        default_extra_args = app.config.get("default_extra_args", "")
+        db_dir = app.config.get("blast_db")
+        available_dbs = list_blast_databases(db_dir)
+
+        if request.method == "POST":
+            sequence = request.form.get("sequence", "").strip()
+            program = request.form.get("program", DEFAULT_PROGRAM)
+            db = request.form.get("database", '')
+            evalue = request.form.get("evalue", "1e-5")
+            max_target_seqs = request.form.get("max_target_seqs", "50")
+            matrix = request.form.get("matrix", "")
+            extra_args = request.form.get("extra_args", "")
+
+            if not db:
+                return render_template("index.html", error="No database")
+
+            if not sequence:
+                return render_template("index.html", error="No query sequence")
+
+            result_lines, error = run_blast(sequence, program, db, evalue, max_target_seqs, matrix, extra_args)
+            if error:
+                return render_template("index.html", error=error)
+
+            return render_template("result.html", results=result_lines, selected_db=db)
+
+        return render_template("index.html", default_extra_args=default_extra_args, db_choices=available_dbs)
 
 
+    @app.route("/subject/<db>/<subject_id>")
+    def get_subject_sequence(db, subject_id):
+        program = "blastdbcmd"
+        cmd_path = get_blast_command(program)
+        db_dir = app.config.get("blast_db")
+        db_path = os.path.join(db_dir, db)
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-    #return "<h1>Hello from Flask</h1>"
-    config = load_config()
-    default_extra_args = config.get("default_extra_args", "")
-    db_dir = config["blast_db"]
-    available_dbs = list_blast_databases(db_dir)
+        try:
+            result = subprocess.run(
+                [cmd_path, "-db", db_path, "-entry", subject_id],
+                check=True, capture_output=True, text=True
+            )
+            fasta = result.stdout
+        except subprocess.CalledProcessError as e:
+            return f"<p>Failed to fetch entry '{subject_id}' from database '{db}': {e.stderr}</p>", 500
 
-    if request.method == "POST":
-        sequence = request.form.get("sequence", "").strip()
-        program = request.form.get("program", DEFAULT_PROGRAM)
-        db = request.form.get("database", DEFAULT_DB)
-        evalue = request.form.get("evalue", "1e-5")
-        max_target_seqs = request.form.get("max_target_seqs", "50")
-        matrix = request.form.get("matrix", "")
-        extra_args = request.form.get("extra_args", "")
+        return f"<pre>{fasta}</pre>"
+
+
+    @app.route("/api/blast", methods=["POST"])
+    def api_blast():
+        data = request.get_json()
+        sequence = data.get("sequence", "").strip()
+        program = data.get("program", DEFAULT_PROGRAM)
+        db = data.get("database", '')
+        evalue = data.get("evalue", "1e-3")
+        max_target_seqs = data.get("max_target_seqs", "50")
+        matrix = data.get("matrix", "")
+        extra_args = data.get("extra_args", "")
+        blast_config = current_app.config["BLAST_CONFIG"]
 
         if not sequence:
-            return render_template("index.html", error="No query sequence")
+            return jsonify({"error": "No sequence provided"}), 400
+
+        if not db:
+            return jsonify({"error": "No database"}), 400
 
         result_lines, error = run_blast(sequence, program, db, evalue, max_target_seqs, matrix, extra_args)
         if error:
-            return render_template("index.html", error=error)
+            return jsonify({"error": error}), 500
 
-        return render_template("result.html", results=result_lines, selected_db=db)
+        return jsonify({"results": result_lines})
 
-    return render_template("index.html", default_extra_args=default_extra_args, db_choices=available_dbs)
-
-
-@app.route("/subject/<db>/<subject_id>")
-def get_subject_sequence(db, subject_id):
-    config = load_config()
-    program = "blastdbcmd"
-    cmd_path = get_blast_command(program, config)
-    db_dir = config["blast_db"]
-    db_path = os.path.join(db_dir, db)
-
-    try:
-        result = subprocess.run(
-            [cmd_path, "-db", db_path, "-entry", subject_id],
-            check=True, capture_output=True, text=True
-        )
-        fasta = result.stdout
-    except subprocess.CalledProcessError as e:
-        return f"<p>Failed to fetch entry '{subject_id}' from database '{db}': {e.stderr}</p>", 500
-
-    return f"<pre>{fasta}</pre>"
+    return app
 
 
-@app.route("/api/blast", methods=["POST"])
-def api_blast():
-    data = request.get_json()
-    sequence = data.get("sequence", "").strip()
-    program = data.get("program", DEFAULT_PROGRAM)
-    db = data.get("database", DEFAULT_DB)
-    evalue = data.get("evalue", "1e-3")
-    max_target_seqs = data.get("max_target_seqs", "50")
-    matrix = data.get("matrix", "")
-    extra_args = data.get("extra_args", "")
-    config = data.get("config", "")
-
-    if not sequence:
-        return jsonify({"error": "No sequence provided"}), 400
-
-    result_lines, error = run_blast(sequence, program, db, evalue, max_target_seqs, matrix, extra_args, config)
-    if error:
-        return jsonify({"error": error}), 500
-
-    return jsonify({"results": result_lines})
-
-if __name__ == "__main__":
-    app.run(debug=True)
-
-import shlex
-
-def run_blast(sequence, program, db_name, evalue="1e-5", max_target_seqs="50", matrix="", extra_args="", config=None):
-    config = config or load_config()
-    blast_path = get_blast_command(program, config)
-    db_dir = config["blast_db"]
+def run_blast(sequence, program, db_name, evalue="1e-5", max_target_seqs="50", matrix="", extra_args=""):
+    blast_path = get_blast_command(program)
+    db_dir = current_app.config["blast_db"]
     db_path = os.path.join(db_dir, db_name)
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".fa", delete=False) as query_f:
@@ -122,7 +120,7 @@ def run_blast(sequence, program, db_name, evalue="1e-5", max_target_seqs="50", m
                 except Exception as e:
                     return [], f"Failed to parse additional options.: {e}"
             else:
-                extra_args = config.get("default_extra_args", "")
+                extra_args = current_app.config["default_extra_args"]
 
             try:
                 subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -139,8 +137,7 @@ def load_config(config_path=None):
     if config_path:
         path = os.path.abspath(config_path)
     else:
-        module_dir = os.path.dirname(__file__)
-        path = os.path.join(module_dir, "blast.yaml")
+        path = os.path.join(os.getcwd(), "blast.yaml")
 
     if not os.path.exists(path):
         raise FileNotFoundError(f"blast.yaml not found: {path}")
@@ -159,8 +156,7 @@ def load_config(config_path=None):
 
 
 def get_blast_command(program, config=None):
-    config = config or load_config()
-    blast_dir = config.get("blast_path", "")
+    blast_dir = current_app.config["blast_path"]
     if blast_dir:
         full_path = os.path.join(blast_dir, program)
         if os.path.isfile(full_path) and os.access(full_path, os.X_OK):

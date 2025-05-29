@@ -1,0 +1,3 @@
+include README.md
+include blastweb/blast.yaml.example
+recursive-include blastweb/templates *

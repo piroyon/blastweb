@@ -1,12 +1,17 @@
+MANIFEST.in
 README.md
 pyproject.toml
 blastweb/__init__.py
 blastweb/__main__.py
 blastweb/app.py
+blastweb/blast.yaml.example
 blastweb/cli.py
+blastweb/wsgi.py
 blastweb.egg-info/PKG-INFO
 blastweb.egg-info/SOURCES.txt
 blastweb.egg-info/dependency_links.txt
 blastweb.egg-info/entry_points.txt
 blastweb.egg-info/requires.txt
 blastweb.egg-info/top_level.txt
+blastweb/templates/index.html
+blastweb/templates/result.html
