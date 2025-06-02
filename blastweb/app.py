@@ -167,6 +167,9 @@ def get_blast_command(program, config=None):
         f"Specify blast_path: /your/blast/bin in 'blast.yaml.'"
     )
 
+def remove_trailing_digits(s):
+    return re.sub(r'\.\d{2}$', '', s)
+
 def list_blast_databases(db_dir):
     files = os.listdir(db_dir)
     exts = ('.nin', '.nsq', '.nhr', '.pin', '.psq', '.phr')
@@ -176,6 +179,6 @@ def list_blast_databases(db_dir):
     for f in files:
         match = pattern.match(f)
         if match:
-            db_names.add(match.group(1))
+            db_names.add(remove_trailing_digits(match.group(1)))
 
     return sorted(db_names)
