@@ -3,3 +3,5 @@ blast_db: /data/blastdb
 
 #default_extra_args: "-soft_masking true -word_size 11"
 default_extra_args: ""
+ 
+url_prefix: 

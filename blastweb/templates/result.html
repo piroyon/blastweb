@@ -68,6 +68,20 @@
     .back-link a:hover {
       text-decoration: underline;
     }
+    button[type="submit"] {
+      margin-top: 2em;
+      padding: 0.7em 1.5em;
+      background: #1d4ed8;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    input[type="submit"]:hover {
+      background: #2563eb;
+    }
+
   </style>
 </head>
 <body>
@@ -97,7 +111,7 @@
             <tr>{% for val in row %}
 	       <td>
 		 {% if loop.index0 == 1 %}
-		    <a href="/subject/{{ selected_db }}/{{ val }}">{{ val }}</a>
+		 <a href="{{url_prefix}}/subject/{{ selected_db }}/{{ val }}">{{ val }}</a>
                  {% else %} {{ val }}
 	         {% endif %}
 	       </td>
@@ -108,10 +122,15 @@
     {% else %}
       <p>No hits found.</p>
     {% endif %}
+    <form action="{{url_prefix}}/download" method="post">
+	    <textarea name="result_text" hidden>{{r_text}}</textarea>
+      <button type="submit">Download Results</button>
+    </form>
+
   </div>
 
   <div class="back-link">
-    <a href="/">← Back to Search</a>
+	  <a href="{{url_prefix}}/">← Back to Search</a>
   </div>
 </body>
 </html>

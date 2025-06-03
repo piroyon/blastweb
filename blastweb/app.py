@@ -1,4 +1,4 @@
-from flask import request, render_template, jsonify, current_app
+from flask import request, render_template, jsonify, current_app, make_response
 import subprocess
 import tempfile
 import os
@@ -19,6 +19,7 @@ def register_routes(app):
         #return "<h1>Hello from Flask</h1>"
         default_extra_args = app.config.get("default_extra_args", "")
         db_dir = app.config.get("blast_db")
+        url_prefix = app.config.get("url_prefix", "")
         available_dbs = list_blast_databases(db_dir)
 
         if request.method == "POST":
@@ -37,12 +38,23 @@ def register_routes(app):
                 return render_template("index.html", error="No query sequence")
 
             result_lines, error = run_blast(sequence, program, db, evalue, max_target_seqs, matrix, extra_args)
+            result_text = "\n".join("\t".join(row) for row in result_lines)
             if error:
                 return render_template("index.html", error=error)
 
-            return render_template("result.html", results=result_lines, selected_db=db)
+            return render_template("result.html", r_text=result_text, results=result_lines, selected_db=db, url_prefix=url_prefix)
 
         return render_template("index.html", default_extra_args=default_extra_args, db_choices=available_dbs)
+
+
+    @app.route("/download", methods=["POST"])
+    def download():
+        content = request.form.get("result_text", "")
+        response = make_response(content)
+        response.headers["Content-Disposition"] = "attachment; filename=blast_result.txt"
+        response.headers["Content-Type"] = "text/plain"
+        return response
+
 
 
     @app.route("/subject/<db>/<subject_id>")
