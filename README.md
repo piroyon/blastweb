@@ -39,12 +39,13 @@ Edit blast.yaml
 blast_path: /usr/local/ncbi/blast+/bin
 blast_db: /mnt/data/blastdb
 default_extra_args: "-soft_masking true -word_size 11"
+url_prefix: "/blastplus"
 ```
 
 * ```blast_path```: Path to the directory where ```blastn```, ```blastp```, etc. are installed
 * ```blast_db```: Path to the directory containing your BLAST databases
 * ```default_extra_args```: Common BLAST options passed to all queries
-
+* ```url_prefix```: If you plan to host this application behind a reverse proxy at a subpath
 ### 🚀 Start server for development or very local use
 
 Start the web server:
