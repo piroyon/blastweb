@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: blastweb
-Version: 0.1.4
+Version: 0.1.5
 Summary: A simple web UI and API for running BLAST+ against local databases.
 Author-email: Hiroyo NISHIDE <hiroyo@nibb.ac.jp>
 License: MIT

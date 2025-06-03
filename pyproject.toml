@@ -1,6 +1,6 @@
 [project]
 name = "blastweb"
-version = "0.1.4"
+version = "0.1.5"
 description = "A simple web UI and API for running BLAST+ against local databases."
 readme = "README.md"
 requires-python = ">=3.8"
