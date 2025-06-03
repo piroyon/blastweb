@@ -18,7 +18,7 @@ Prepare venv: (Highly recommended)
 python -m venv my_blastweb
 source my_blastweb/bin/activate
 ```
-from github:
+from github: - If you choose this installation method, the ```blastweb``` command must be run in the ```<blastweb top dir>```.
 ```
 git clone https://github.com/piroyon/blastweb.git
 cd blastweb
@@ -48,7 +48,6 @@ url_prefix: "/blastplus"
 * ```url_prefix```: If you plan to host this application behind a reverse proxy at a subpath
 ### 🚀 Start server for development or very local use
 
-Start the web server:
 ```bash
 cd <blastweb_topdir>
 blastweb runserver --port 5000 --config /path/to/blast.yaml

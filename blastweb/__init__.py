@@ -18,7 +18,7 @@ def create_app(config_path=None, use_dispatcher=True):
     app.config.update(config)
     register_routes(app)
     if use_dispatcher:
-        prefix = config.get("url_prefix", "").rstrip("/")
+        prefix = config.get("url_prefix", "")
         if prefix:
-            app = DispatcherMiddleware(Flask("dummy"), {prefix: app})
+            app = DispatcherMiddleware(Flask("dummy"), {prefix.rstrip("/"): app})
     return app
