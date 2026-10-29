@@ -24,16 +24,21 @@ Prepare venv: (Highly recommended)
 python -m venv my_blastweb
 source my_blastweb/bin/activate
 ```
-from github: - If you choose this installation method, the ```blastweb``` command must be run in the ```<blastweb top dir>```.
+Use pip:
+```
+pip install blastweb
+```
+or, from github (for development):
 ```
 git clone https://github.com/piroyon/blastweb.git
 cd blastweb
 pip install -e .
 ```
-or, use pip:
-```
-pip install blastweb
-```
+Either way, the ```blastweb``` command and gunicorn work from any directory.
+
+> **Note:** If you switch from a git clone to the pip package, do not start blastweb (or gunicorn) inside the old clone directory.
+> Python imports the `blastweb/` folder in the current directory first, so the old code would run instead of the installed version.
+> You can check which code is used with `python -c "import blastweb; print(blastweb.__file__)"`.
 
 ### ⚙️ Configuration
 Create a config file 'blast.yaml' in the current directory
@@ -65,7 +70,6 @@ Options touching files, output format or remote search (e.g. `-out`, `-outfmt`, 
 ### 🚀 Start server for development or very local use
 
 ```bash
-cd <blastweb_topdir>
 blastweb runserver --port 5000 --config /path/to/blast.yaml
 ```
 Then open http://localhost:5000 in your browser.
@@ -126,19 +130,23 @@ For production environments, it is strongly recommended to run blastweb behind a
 [Client] → [nginx :443/80] → [gunicorn :5000] → blastweb.app
 ```
 #### Step 1: Install gunicorn
+Install it into the same venv as blastweb:
 ```bash
 pip install gunicorn
 ```
 #### Step 2: Start blastweb with gunicorn
+Run it with the venv's Python, from a directory other than a blastweb git clone (see the note in Installation):
 ````bash
-BLASTWEB_CONFIG=/path/to/blast.yaml gunicorn blastweb.wsgi:app --bind 127.0.0.1:5000
+BLASTWEB_CONFIG=/path/to/blast.yaml /path/to/venv/bin/python -m gunicorn blastweb.wsgi:app --bind 127.0.0.1:5000
 ````
+Web searches run in the background, so gunicorn's `--timeout` only matters for the synchronous `/api/blast`.
 #### Step 3: Configure nginx (external to this project)
 a minimal nginx config:
 ```nginx
 server {
     listen 80;
     server_name your.domain.com;
+    client_max_body_size 10m;  # match max_upload_mb (nginx default is 1m)
 
     location / {
         proxy_pass http://127.0.0.1:5000;
