@@ -1,6 +1,10 @@
 # blastweb
 
-Local BLAST search via Web UI and REST API using Flask, inspired by NCBI's legacy wwwblast.
+A simple web interface and REST API for searching local BLAST+ databases, inspired by NCBI's legacy wwwblast.
+
+If you used to host wwwblast on your own server, blastweb offers a similar experience for BLAST+.
+
+![Result page with graphical overview, hit table and alignments](https://raw.githubusercontent.com/piroyon/blastweb/main/docs/screenshot.png)
 
 - Search form with database / task / option choices filtered by program
 - Multi-FASTA queries and FASTA file upload
@@ -8,12 +12,14 @@ Local BLAST search via Web UI and REST API using Flask, inspired by NCBI's legac
 - wwwblast-style results: graphical overview, hit table and pairwise alignments
 - Download results as pairwise text, TSV, CSV, XML, JSON or ASN.1 archive
 
+This project is not affiliated with or endorsed by NCBI.
+
 ---
 
 ### 🐍 Requirements
 
 - Python 3.8 or later
-- NCBI BLAST+（ include `makeblastdb`, `blastdbcmd`）
+- NCBI BLAST+（ include `makeblastdb`, `blastdbcmd`, `blast_formatter`）
   - BLAST+ can be downloaded from here https://blast.ncbi.nlm.nih.gov/doc/blast-help/downloadblastdata.html
 
 
