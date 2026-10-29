@@ -155,7 +155,7 @@ Releases are published to PyPI by GitHub Actions (`.github/workflows/release.yml
 1. Bump `version` in `pyproject.toml` and commit
 2. Tag and push (the tag must match the version):
 ```bash
-git tag v0.1.7
-git push origin main v0.1.7
+git tag v0.2.0
+git push origin main v0.2.0
 ```
 The workflow builds the package, uploads it to TestPyPI, then PyPI, and creates a GitHub Release with auto-generated notes.

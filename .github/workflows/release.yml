@@ -1,5 +1,5 @@
 # Release on tag push: test -> build -> TestPyPI -> PyPI -> GitHub Release
-#   git tag v0.1.7 && git push origin v0.1.7
+#   git tag v0.2.0 && git push origin v0.2.0
 # Uses PyPI Trusted Publishing (no API token needed).
 name: Release
 
