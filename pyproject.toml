@@ -1,6 +1,10 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "blastweb"
-version = "0.1.6"
+version = "0.1.7"
 description = "A simple web UI and API for running BLAST+ against local databases."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -17,3 +21,10 @@ dependencies = [
 [project.scripts]
 blastweb = "blastweb.cli:cli"
 
+
+[project.urls]
+Homepage = "https://github.com/piroyon/blastweb"
+
+[tool.setuptools]
+packages = ["blastweb"]
+include-package-data = true

@@ -120,3 +120,13 @@ server {
 ```
 * To enable HTTPS, consider using [Let's Encrypt](https://letsencrypt.org/).
 * Nginx is not included in this repository — please configure it separately on your server.
+
+### 🏷️ Releasing (for maintainers)
+Releases are published to PyPI by GitHub Actions (`.github/workflows/release.yml`) when a version tag is pushed.
+1. Bump `version` in `pyproject.toml` and commit
+2. Tag and push (the tag must match the version):
+```bash
+git tag v0.1.7
+git push origin main v0.1.7
+```
+The workflow builds the package, uploads it to TestPyPI, then PyPI, and creates a GitHub Release with auto-generated notes.
