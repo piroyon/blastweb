@@ -1,137 +1,205 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>BLAST+ Results</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet">
-  <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      background-color: #f9fafb;
-      padding: 2em;
-      color: #333;
+{% extends "base.html" %}
+{% block title %}BLAST+ Results{% endblock %}
+{% block style %}
+    h2 {
+      margin-top: 0;
+      font-size: 1.2em;
     }
-
-    h1 {
-      text-align: center;
-      color: #1d4ed8;
-      margin-bottom: 1em;
+    h3 {
+      font-size: 1em;
+      margin-top: 2em;
+      border-bottom: 1px solid #e5e7eb;
+      padding-bottom: 0.3em;
     }
-
-    .result-container {
-      max-width: 95%;
-      margin: auto;
-      background: #ffffff;
-      padding: 1.5em;
-      border-radius: 8px;
-      box-shadow: 0 0 8px rgba(0,0,0,0.1);
-      overflow-x: auto;
+    .summary td {
+      padding: 0.2em 1em 0.2em 0;
+      border: none;
+      white-space: normal;
     }
-
-    table {
+    .downloads {
+      margin-top: 1em;
+    }
+    .downloads a {
+      margin-right: 0.8em;
+    }
+    .query-nav a {
+      display: inline-block;
+      margin-right: 1em;
+    }
+    .hits {
       width: 100%;
       border-collapse: collapse;
       font-size: 0.9em;
     }
-
-    th {
+    .hits th {
       background-color: #e0e7ff;
       color: #111827;
       font-weight: bold;
       padding: 0.6em;
       border-bottom: 2px solid #c7d2fe;
       white-space: nowrap;
+      text-align: left;
     }
-
-    td {
+    .hits td {
       padding: 0.5em;
       border-bottom: 1px solid #e5e7eb;
       white-space: nowrap;
     }
-
-    tr:hover {
+    .hits td.desc {
+      white-space: normal;
+      min-width: 15em;
+    }
+    .hits td.num {
+      text-align: right;
+    }
+    .hits tr:hover {
       background-color: #f3f4f6;
     }
-
-    .back-link {
+    .overview svg {
+      width: 100%;
+      max-width: 760px;
+      height: auto;
       display: block;
-      text-align: center;
-      margin-top: 2em;
     }
+    .overview a:hover rect {
+      opacity: 0.6;
+    }
+    .alignment {
+      margin-top: 1.5em;
+    }
+    .alignment pre {
+      font-size: 0.85em;
+      line-height: 1.3;
+      overflow-x: auto;
+    }
+    .alignment .hsp-stats {
+      font-family: monospace;
+      font-size: 0.85em;
+      margin: 0.8em 0 0.3em;
+    }
+    .alignment:target {
+      background: #fefce8;
+    }
+    .to-top {
+      font-size: 0.85em;
+    }
+{% endblock %}
+{% block content %}
+  {% set legend_width = 140 %}
+  <div class="panel wide">
+    <h2>Search summary</h2>
+    <table class="summary">
+      <tr><td>Program</td><td>{{ params.program }}{% if params.task %} ({{ params.task }}){% endif %}</td></tr>
+      <tr><td>Database</td><td>{{ params.database }}</td></tr>
+      <tr><td>Parameters</td><td>E-value {{ params.evalue }}, max target seqs {{ params.max_target_seqs }}
+        {%- if params.matrix %}, matrix {{ params.matrix }}{% endif %}
+        {%- if params.word_size %}, word size {{ params.word_size }}{% endif %}
+        {%- if params.filter %}, low complexity filter {{ 'on' if params.filter == 'yes' else 'off' }}{% endif %}
+        {%- if params.strand %}, strand {{ params.strand }}{% endif %}
+        {%- if params.extra_args %}, <code>{{ params.extra_args }}</code>{% endif %}</td></tr>
+      <tr><td>Job ID</td><td><a href="{{ url_for('job', job_id=job_id) }}">{{ job_id }}</a> <span class="muted">(results are kept for a limited time)</span></td></tr>
+    </table>
+    <div class="downloads">
+      Download:
+      {% for name, fmt in download_formats.items() %}
+        <a href="{{ url_for('download', job_id=job_id, fmt=name) }}">{{ {'pairwise': 'Pairwise text', 'tabular': 'Hit table (TSV)', 'tabular-header': 'Hit table with headers', 'csv': 'CSV', 'xml': 'XML', 'json': 'JSON', 'asn': 'ASN.1 archive'}[name] }}</a>
+      {% endfor %}
+    </div>
+    {% if queries | length > 1 %}
+      <p class="query-nav">Queries:
+        {% for q in queries %}<a href="#{{ q.anchor }}">{{ q.title }} ({{ q.hits | length }} hit{{ '' if q.hits | length == 1 else 's' }})</a>{% endfor %}
+      </p>
+    {% endif %}
+  </div>
 
-    .back-link a {
-      color: #2563eb;
-      text-decoration: none;
-      font-weight: bold;
-    }
+  {% for q in queries %}
+  <div class="panel wide" id="{{ q.anchor }}">
+    <h2>Query: {{ q.title }} <span class="muted">(length {{ q.len }})</span></h2>
 
-    .back-link a:hover {
-      text-decoration: underline;
-    }
-    button[type="submit"] {
-      margin-top: 2em;
-      padding: 0.7em 1.5em;
-      background: #1d4ed8;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    input[type="submit"]:hover {
-      background: #2563eb;
-    }
+    {% if not q.hits %}
+      <p>No hits found.{% if q.message %} <span class="muted">{{ q.message }}</span>{% endif %}</p>
+    {% else %}
+      {% set ov = q.overview %}
+      {% set row_h = 10 %}
+      {% set top = 52 %}
+      <h3>Graphical overview</h3>
+      <div class="overview">
+        <svg viewBox="-30 0 {{ ov.width + 60 }} {{ top + ov.rows | length * row_h + 10 }}" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="10">
+          <text x="0" y="12">Color key for alignment scores</text>
+          {% for color, label in legend %}
+            <rect x="{{ loop.index0 * legend_width }}" y="17" width="{{ legend_width - 4 }}" height="12" fill="{{ color }}"/>
+            <text x="{{ loop.index0 * legend_width + (legend_width - 4) / 2 }}" y="26.5" fill="#fff" text-anchor="middle">{{ label }}</text>
+          {% endfor %}
+          <line x1="0" y1="{{ top - 6 }}" x2="{{ ov.width }}" y2="{{ top - 6 }}" stroke="#333"/>
+          {% for t in ov.ticks %}
+            <line x1="{{ t.x }}" y1="{{ top - 9 }}" x2="{{ t.x }}" y2="{{ top - 3 }}" stroke="#333"/>
+            <text x="{{ t.x }}" y="{{ top - 12 }}" text-anchor="middle">{{ t.label }}</text>
+          {% endfor %}
+          {% for row in ov.rows %}
+            <a href="#{{ row.anchor }}">
+              <title>{{ row.label }}</title>
+              <rect x="0" y="{{ top + loop.index0 * row_h }}" width="{{ ov.width }}" height="{{ row_h - 2 }}" fill="transparent"/>
+              {% set y = top + loop.index0 * row_h %}
+              {% for s in row.segments %}
+                <rect x="{{ s.x }}" y="{{ y }}" width="{{ s.width }}" height="{{ row_h - 3 }}" fill="{{ s.color }}"/>
+              {% endfor %}
+            </a>
+          {% endfor %}
+        </svg>
+        {% if ov.truncated %}<p class="muted">Showing the top {{ ov.rows | length }} hits.</p>{% endif %}
+      </div>
 
-  </style>
-</head>
-<body>
-  <h1>BLAST+ Search Results</h1>
-
-  <div class="result-container">
-    {% if results %}
-      <table>
+      <h3>Sequences producing significant alignments</h3>
+      <table class="hits">
         <thead>
           <tr>
-            <th>Query</th>
             <th>Subject</th>
-            <th>% Identity</th>
-            <th>Alignment Length</th>
-            <th>Mismatches</th>
-            <th>Gaps</th>
-            <th>Q. Start</th>
-            <th>Q. End</th>
-            <th>S. Start</th>
-            <th>S. End</th>
+            <th>Description</th>
+            <th>Max score</th>
+            <th>Total score</th>
+            <th>Query cover</th>
             <th>E-value</th>
-            <th>Bit Score</th>
+            <th>% Identity</th>
+            <th>Length</th>
           </tr>
         </thead>
         <tbody>
-          {% for row in results %}
-            <tr>{% for val in row %}
-	       <td>
-		 {% if loop.index0 == 1 %}
-		 <a href="{{url_prefix}}/subject/{{ selected_db }}/{{ val }}">{{ val }}</a>
-                 {% else %} {{ val }}
-	         {% endif %}
-	       </td>
-	     {% endfor %}</tr>
+          {% for hit in q.hits %}
+            <tr>
+              <td><a href="{{ url_for('get_subject_sequence', db=params.database, subject_id=hit.id) }}">{{ hit.id }}</a></td>
+              <td class="desc"><a href="#{{ hit.anchor }}">{{ hit.title or '(no description)' }}</a></td>
+              <td class="num">{{ '%.1f' | format(hit.max_score) }}</td>
+              <td class="num">{{ '%.1f' | format(hit.total_score) }}</td>
+              <td class="num">{{ '%.0f' | format(hit.query_cover) }}%</td>
+              <td class="num">{{ '%.2g' | format(hit.evalue) }}</td>
+              <td class="num">{{ '%.1f' | format(hit.identity) }}</td>
+              <td class="num">{{ hit.len }}</td>
+            </tr>
           {% endfor %}
         </tbody>
       </table>
-    {% else %}
-      <p>No hits found.</p>
+
+      <h3>Alignments</h3>
+      {% for hit in q.hits %}
+        <div class="alignment" id="{{ hit.anchor }}">
+          <strong>&gt;<a href="{{ url_for('get_subject_sequence', db=params.database, subject_id=hit.id) }}">{{ hit.id }}</a> {{ hit.title }}</strong>
+          <div class="muted">Length = {{ hit.len }}</div>
+          {% for hsp in hit.hsps %}
+            <div class="hsp-stats">
+              Score = {{ '%.1f' | format(hsp.bit_score) }} bits ({{ hsp.score }}), Expect = {{ '%.2g' | format(hsp.evalue) }}<br>
+              Identities = {{ hsp.identity }}/{{ hsp.align_len }} ({{ '%.0f' | format(hsp.identity_pct) }}%)
+              {%- if hsp.positive is not none %}, Positives = {{ hsp.positive }}/{{ hsp.align_len }} ({{ '%.0f' | format(hsp.positive_pct) }}%){% endif %},
+              Gaps = {{ hsp.gaps }}/{{ hsp.align_len }} ({{ '%.0f' | format(hsp.gaps_pct) }}%)
+              {%- if hsp.orientation %}<br>{{ hsp.orientation }}{% endif %}
+            </div>
+            <pre>{{ hsp.alignment }}</pre>
+          {% endfor %}
+          <a class="to-top" href="#{{ q.anchor }}">↑ Back to query</a>
+        </div>
+      {% endfor %}
     {% endif %}
-    <form action="{{url_prefix}}/download" method="post">
-	    <textarea name="result_text" hidden>{{r_text}}</textarea>
-      <button type="submit">Download Results</button>
-    </form>
-
   </div>
+  {% endfor %}
 
-  <div class="back-link">
-	  <a href="{{url_prefix}}/">← Back to Search</a>
-  </div>
-</body>
-</html>
-
+  <a class="back-link" href="{{ url_for('index') }}">← Back to Search</a>
+{% endblock %}

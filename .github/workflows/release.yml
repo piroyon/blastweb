@@ -1,4 +1,4 @@
-# Release on tag push: build -> TestPyPI -> PyPI -> GitHub Release
+# Release on tag push: test -> build -> TestPyPI -> PyPI -> GitHub Release
 #   git tag v0.1.7 && git push origin v0.1.7
 # Uses PyPI Trusted Publishing (no API token needed).
 name: Release
@@ -8,7 +8,11 @@ on:
     tags: ["v*"]
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

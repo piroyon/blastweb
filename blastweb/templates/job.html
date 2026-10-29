@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}BLAST+ Job{% endblock %}
+{% block head %}
+  {% if status.state == 'running' %}<meta http-equiv="refresh" content="3">{% endif %}
+{% endblock %}
+{% block content %}
+  <div class="panel">
+    {% if status.state == 'running' %}
+      <h2>Searching…</h2>
+      <p>{{ params.program }} against <strong>{{ params.database }}</strong> — {{ elapsed }} seconds elapsed.</p>
+      <p class="muted">This page refreshes automatically. You can bookmark it and come back later.</p>
+    {% else %}
+      <h2>Search failed</h2>
+      <div class="error">{{ status.error }}</div>
+    {% endif %}
+    <p class="muted">Job ID: {{ job_id }}</p>
+  </div>
+  <a class="back-link" href="{{ url_for('index') }}">← Back to Search</a>
+{% endblock %}

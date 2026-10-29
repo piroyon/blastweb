@@ -8,3 +8,12 @@ url_prefix: ""
 
 # Max seconds a BLAST search may run (default: 600)
 #timeout: 600
+
+# Where search jobs are stored (default: <system temp dir>/blastweb_jobs)
+#job_dir: /var/lib/blastweb/jobs
+# Days to keep job results (default: 7)
+#job_retention_days: 7
+# Max searches running at the same time (default: 4)
+#max_running_jobs: 4
+# Max size of an uploaded FASTA file in MB (default: 10)
+#max_upload_mb: 10

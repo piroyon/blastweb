@@ -18,6 +18,9 @@ dependencies = [
   "PyYAML"
 ]
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [project.scripts]
 blastweb = "blastweb.cli:cli"
 
@@ -28,3 +31,6 @@ Homepage = "https://github.com/piroyon/blastweb"
 [tool.setuptools]
 packages = ["blastweb"]
 include-package-data = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

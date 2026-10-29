@@ -1,207 +1,165 @@
-from flask import request, render_template, jsonify, current_app, make_response
-import subprocess
-import tempfile
+from flask import request, render_template, jsonify, current_app, make_response, redirect, url_for, abort
 import os
+import tempfile
+import time
 import yaml
-import shlex
-import re
 
-PROGRAMS = ['blastn', 'blastp', 'blastx', 'tblastn', 'tblastx']
-MATRIX_PROGRAMS = ['blastp', 'blastx', 'tblastn', 'tblastx']
-DEFAULT_TIMEOUT = 600
+from . import jobs
+from .blast import (PROGRAMS, MATRIX_PROGRAMS, MATRICES, TASKS, STRAND_PROGRAMS, DEFAULT_TIMEOUT,
+                    BlastError, list_blast_databases, build_search_command, build_query_fasta,
+                    run_tabular_search, fetch_subject, get_blast_command)
+from .report import build_report, score_legend
 
-# Options users may pass via "Additional Options".
-# Anything touching files, output format, remote search or threads is excluded.
-ALLOWED_EXTRA_OPTIONS = {
-    '-task', '-word_size', '-gapopen', '-gapextend', '-reward', '-penalty',
-    '-strand', '-dust', '-seg', '-soft_masking', '-lcase_masking',
-    '-ungapped', '-comp_based_stats', '-threshold', '-perc_identity',
-    '-qcov_hsp_perc', '-max_hsps', '-culling_limit', '-window_size',
-    '-xdrop_ungap', '-xdrop_gap', '-xdrop_gap_final', '-searchsp',
-    '-sum_stats', '-best_hit_overhang', '-best_hit_score_edge',
-    '-min_raw_gapped_score', '-template_type', '-template_length',
-    '-query_gencode', '-db_gencode', '-query_loc', '-matrix',
-    '-max_intron_length', '-use_sw_tback', '-no_greedy', '-subject_besthit',
-}
+PARAM_KEYS = ["program", "database", "evalue", "max_target_seqs", "matrix", "task",
+              "word_size", "filter", "strand", "extra_args"]
 
 
 def register_routes(app):
 
-    DEFAULT_PROGRAM = 'blastn'
+    def form_context(**kwargs):
+        return dict(
+            default_extra_args=app.config.get("default_extra_args", ""),
+            db_choices=list_blast_databases(),
+            programs=PROGRAMS, matrix_programs=MATRIX_PROGRAMS, matrices=MATRICES,
+            tasks=TASKS, strand_programs=STRAND_PROGRAMS,
+            **kwargs
+        )
+
+    def submit_job(sequence, params):
+        """Validate and start a background job. Returns the job ID or raises BlastError."""
+        search_cmd = build_search_command(params)
+        job_dir = app.config["job_dir"]
+        os.makedirs(job_dir, exist_ok=True)
+        jobs.cleanup_old_jobs(job_dir, app.config["job_retention_days"])
+        if jobs.count_running(job_dir) >= app.config["max_running_jobs"]:
+            raise BlastError("The server is busy. Please try again later.")
+        return jobs.start_job(job_dir, build_query_fasta(sequence), params, search_cmd,
+                              get_blast_command("blast_formatter"), app.config["timeout"])
+
+    def find_job(job_id):
+        path = jobs.job_path(app.config["job_dir"], job_id)
+        if path is None:
+            abort(404)
+        return path
 
     @app.route("/", methods=["GET", "POST"])
     def index():
-        default_extra_args = app.config.get("default_extra_args", "")
-        db_dir = app.config.get("blast_db")
-        url_prefix = app.config.get("url_prefix", "")
-        available_dbs = list_blast_databases(db_dir)
-
-        def form_error(message):
-            return render_template("index.html", error=message,
-                                   default_extra_args=default_extra_args, db_choices=available_dbs)
-
         if request.method == "POST":
             sequence = request.form.get("sequence", "").strip()
-            program = request.form.get("program", DEFAULT_PROGRAM)
-            db = request.form.get("database", '')
-            evalue = request.form.get("evalue", "1e-5")
-            max_target_seqs = request.form.get("max_target_seqs", "50")
-            matrix = request.form.get("matrix", "")
-            extra_args = request.form.get("extra_args", "")
+            upload = request.files.get("query_file")
+            if upload and upload.filename:
+                sequence = upload.read().decode("utf-8", errors="replace").strip()
+            params = {key: request.form.get(key, "") for key in PARAM_KEYS}
 
-            if not db:
-                return form_error("No database")
-
+            if not params["database"]:
+                return render_template("index.html", **form_context(error="No database"))
             if not sequence:
-                return form_error("No query sequence")
+                return render_template("index.html", **form_context(error="No query sequence"))
 
-            result_lines, error = run_blast(sequence, program, db, evalue, max_target_seqs, matrix, extra_args)
-            if error:
-                return form_error(error)
-            result_text = "\n".join("\t".join(row) for row in result_lines)
+            try:
+                job_id = submit_job(sequence, params)
+            except BlastError as e:
+                return render_template("index.html", **form_context(error=str(e)))
+            return redirect(url_for("job", job_id=job_id))
 
-            return render_template("result.html", r_text=result_text, results=result_lines, selected_db=db, url_prefix=url_prefix)
-
-        return render_template("index.html", default_extra_args=default_extra_args, db_choices=available_dbs)
+        return render_template("index.html", **form_context())
 
 
-    @app.route("/download", methods=["POST"])
-    def download():
-        content = request.form.get("result_text", "")
+    @app.route("/job/<job_id>")
+    def job(job_id):
+        path = find_job(job_id)
+        status = jobs.get_status(path)
+        params = jobs.get_params(path)
+        if status["state"] != "done":
+            return render_template("job.html", job_id=job_id, status=status, params=params,
+                                   elapsed=int((status.get("finished") or time.time()) - status["started"]))
+
+        queries = build_report(jobs.get_result(path))
+        return render_template("result.html", job_id=job_id, params=params, queries=queries,
+                               legend=score_legend(), download_formats=jobs.DOWNLOAD_FORMATS)
+
+
+    @app.route("/job/<job_id>/download/<fmt>")
+    def download(job_id, fmt):
+        path = find_job(job_id)
+        if fmt not in jobs.DOWNLOAD_FORMATS or jobs.get_status(path)["state"] != "done":
+            abort(404)
+        content, ext, content_type = jobs.format_result(path, fmt, get_blast_command("blast_formatter"),
+                                                        app.config["timeout"])
         response = make_response(content)
-        response.headers["Content-Disposition"] = "attachment; filename=blast_result.txt"
-        response.headers["Content-Type"] = "text/plain"
+        response.headers["Content-Disposition"] = f"attachment; filename=blast_{job_id[:8]}.{ext}"
+        response.headers["Content-Type"] = content_type
         return response
 
 
-
-    @app.route("/subject/<db>/<subject_id>")
+    @app.route("/subject/<db>/<path:subject_id>")
     def get_subject_sequence(db, subject_id):
         text_headers = {"Content-Type": "text/plain; charset=utf-8"}
-        if db not in list_blast_databases(app.config.get("blast_db")):
-            return f"Unknown database: {db}\n", 404, text_headers
-
-        cmd_path = get_blast_command("blastdbcmd")
-        db_path = os.path.join(app.config.get("blast_db"), db)
-
         try:
-            result = subprocess.run(
-                [cmd_path, "-db", db_path, "-entry", subject_id],
-                check=True, capture_output=True, text=True, timeout=60
-            )
-        except subprocess.CalledProcessError as e:
-            return f"Failed to fetch entry '{subject_id}' from database '{db}': {e.stderr}", 500, text_headers
-        except subprocess.TimeoutExpired:
-            return f"Timed out fetching entry '{subject_id}'\n", 504, text_headers
+            return fetch_subject(db, subject_id), 200, text_headers
+        except BlastError as e:
+            return f"{e}\n", 404, text_headers
 
-        return result.stdout, 200, text_headers
 
+    def api_params(data):
+        params = {key: data.get(key, "") for key in PARAM_KEYS}
+        params["program"] = params["program"] or "blastn"
+        params["evalue"] = params["evalue"] or "1e-3"
+        if "extra_args" not in data:
+            params["extra_args"] = current_app.config.get("default_extra_args", "")
+        return params
 
     @app.route("/api/blast", methods=["POST"])
     def api_blast():
+        """Run a search synchronously and return tabular (outfmt 6) rows."""
         data = request.get_json(silent=True) or {}
         sequence = data.get("sequence", "").strip()
-        program = data.get("program", DEFAULT_PROGRAM)
-        db = data.get("database", '')
-        evalue = data.get("evalue", "1e-3")
-        max_target_seqs = data.get("max_target_seqs", "50")
-        matrix = data.get("matrix", "")
-        extra_args = data.get("extra_args", current_app.config.get("default_extra_args", ""))
-
         if not sequence:
             return jsonify({"error": "No sequence provided"}), 400
-
-        if not db:
+        if not data.get("database"):
             return jsonify({"error": "No database"}), 400
 
-        result_lines, error = run_blast(sequence, program, db, evalue, max_target_seqs, matrix, extra_args)
-        if error:
-            return jsonify({"error": error}), 400
-
+        try:
+            result_lines = run_tabular_search(sequence, api_params(data))
+        except BlastError as e:
+            return jsonify({"error": str(e)}), 400
         return jsonify({"results": result_lines})
 
-    return app
 
-
-def build_query_fasta(sequence):
-    """Use the input as-is if it is already FASTA (possibly multi-FASTA)."""
-    if sequence.startswith(">"):
-        return sequence + "\n"
-    return ">query\n" + sequence + "\n"
-
-
-def parse_extra_args(extra_args):
-    """Split extra_args and reject options not in ALLOWED_EXTRA_OPTIONS.
-
-    default_extra_args from blast.yaml is set by the admin and trusted as-is.
-    """
-    try:
-        tokens = shlex.split(extra_args)
-    except ValueError as e:
-        return None, f"Failed to parse additional options: {e}"
-
-    if extra_args.strip() == current_app.config.get("default_extra_args", "").strip():
-        return tokens, None
-
-    for token in tokens:
-        # Negative numbers (e.g. "-penalty -3") are values, not options
-        if re.match(r"^-[A-Za-z]", token) and token not in ALLOWED_EXTRA_OPTIONS:
-            return None, f"Option not allowed: {token}"
-    return tokens, None
-
-
-def run_blast(sequence, program, db_name, evalue="1e-5", max_target_seqs="50", matrix="", extra_args=""):
-    if program not in PROGRAMS:
-        return [], f"Unknown program: {program}"
-
-    db_dir = current_app.config["blast_db"]
-    if db_name not in list_blast_databases(db_dir):
-        return [], f"Unknown database: {db_name}"
-
-    try:
-        float(evalue)
-        int(max_target_seqs)
-    except (TypeError, ValueError):
-        return [], "E-value and Max target seqs must be numbers"
-
-    extra_tokens, error = parse_extra_args(extra_args or "")
-    if error:
-        return [], error
-
-    blast_path = get_blast_command(program)
-    db_path = os.path.join(db_dir, db_name)
-    timeout = current_app.config.get("timeout", DEFAULT_TIMEOUT)
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        query_path = os.path.join(tmpdir, "query.fa")
-        out_path = os.path.join(tmpdir, "result.out")
-        with open(query_path, "w") as query_f:
-            query_f.write(build_query_fasta(sequence))
-
-        cmd = [
-            blast_path,
-            "-query", query_path,
-            "-db", db_path,
-            "-out", out_path,
-            "-outfmt", "6",
-            "-evalue", str(evalue),
-            "-max_target_seqs", str(max_target_seqs),
-        ]
-
-        if program in MATRIX_PROGRAMS and matrix:
-            cmd += ["-matrix", matrix]
-
-        cmd += extra_tokens
+    @app.route("/api/jobs", methods=["POST"])
+    def api_submit_job():
+        """Start a background search. Poll the returned status_url until state is done."""
+        data = request.get_json(silent=True) or {}
+        sequence = data.get("sequence", "").strip()
+        if not sequence:
+            return jsonify({"error": "No sequence provided"}), 400
+        if not data.get("database"):
+            return jsonify({"error": "No database"}), 400
 
         try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=timeout)
-        except subprocess.CalledProcessError as e:
-            return [], f"BLAST error: {e.stderr.strip() or e}"
-        except subprocess.TimeoutExpired:
-            return [], f"BLAST timed out after {timeout} seconds"
+            job_id = submit_job(sequence, api_params(data))
+        except BlastError as e:
+            return jsonify({"error": str(e)}), 400
+        return jsonify({
+            "job_id": job_id,
+            "status_url": url_for("api_job", job_id=job_id, _external=True),
+            "result_url": url_for("job", job_id=job_id, _external=True),
+        }), 202
 
-        with open(out_path) as out_f:
-            return [line.rstrip("\n").split("\t") for line in out_f if line.strip()], None
+
+    @app.route("/api/jobs/<job_id>")
+    def api_job(job_id):
+        """Job state; when done, includes the BLAST JSON (outfmt 15) as blast_output."""
+        path = find_job(job_id)
+        status = jobs.get_status(path)
+        body = {"job_id": job_id, "state": status["state"], "params": jobs.get_params(path)}
+        if status["state"] == "error":
+            body["error"] = status["error"]
+        elif status["state"] == "done":
+            body["blast_output"] = jobs.get_result(path)
+        return jsonify(body)
+
+    return app
 
 
 def load_config(config_path=None):
@@ -224,33 +182,10 @@ def load_config(config_path=None):
         config["blast_path"] = ""
     if not config.get("default_extra_args"):
         config["default_extra_args"] = ""
+    config.setdefault("timeout", DEFAULT_TIMEOUT)
+    config["job_dir"] = config.get("job_dir") or os.path.join(tempfile.gettempdir(), "blastweb_jobs")
+    config.setdefault("job_retention_days", 7)
+    config.setdefault("max_running_jobs", 4)
+    config["MAX_CONTENT_LENGTH"] = int(config.get("max_upload_mb", 10)) * 1024 * 1024
 
     return config
-
-
-def get_blast_command(program, config=None):
-    blast_dir = current_app.config["blast_path"]
-    if blast_dir:
-        full_path = os.path.join(blast_dir, program)
-        if os.path.isfile(full_path) and os.access(full_path, os.X_OK):
-            return full_path
-
-    raise FileNotFoundError(
-        f"BLAST+ command '{program}' not found\n"
-        f"Specify blast_path: /your/blast/bin in 'blast.yaml.'"
-    )
-
-def remove_trailing_digits(s):
-    return re.sub(r'\.\d{2}$', '', s)
-
-def list_blast_databases(db_dir):
-    files = os.listdir(db_dir)
-    pattern = re.compile(r"^(.+)\.(nin|nsq|nhr|pin|psq|phr)$")
-
-    db_names = set()
-    for f in files:
-        match = pattern.match(f)
-        if match:
-            db_names.add(remove_trailing_digits(match.group(1)))
-
-    return sorted(db_names)

@@ -1,7 +1,7 @@
 import os
 import shutil
 import click
-from flask import Flask
+from werkzeug.serving import run_simple
 from blastweb import create_app
 import importlib.resources as pkg_resources
 
@@ -17,8 +17,9 @@ def cli():
 @click.option('--config', default='blast.yaml', help='Path to blast.yaml')
 def runserver(host, port, debug, config):
     """Run the development server."""
+    # create_app may return a DispatcherMiddleware (url_prefix), which has no .run()
     app = create_app(config)
-    app.run(host=host, port=port, debug=debug)
+    run_simple(host, port, app, use_reloader=debug, use_debugger=debug, threaded=True)
 
 @cli.command()
 def init():
