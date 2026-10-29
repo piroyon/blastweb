@@ -5,3 +5,6 @@ blast_db: /data/blastdb
 default_extra_args: ""
  
 url_prefix: ""
+
+# Max seconds a BLAST search may run (default: 600)
+#timeout: 600

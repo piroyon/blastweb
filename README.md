@@ -46,6 +46,11 @@ url_prefix: "/blastplus"
 * ```blast_db```: Path to the directory containing your BLAST databases
 * ```default_extra_args```: Common BLAST options passed to all queries
 * ```url_prefix```: If you plan to host this application behind a reverse proxy at a subpath
+* ```timeout```: (optional) Max seconds a BLAST search may run. Default 600
+
+Only common search options (e.g. `-word_size`, `-strand`, `-dust`, `-task`) are accepted in "Additional Options".
+Options touching files, output format or remote search (e.g. `-out`, `-outfmt`, `-remote`) are rejected.
+`default_extra_args` is set by the admin and is not restricted.
 ### 🚀 Start server for development or very local use
 
 ```bash

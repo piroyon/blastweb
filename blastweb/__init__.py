@@ -1,6 +1,5 @@
 from flask import Flask
-from .app import register_routes
-import yaml
+from .app import register_routes, load_config
 import os
 from werkzeug.middleware.dispatcher import DispatcherMiddleware
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -10,10 +9,9 @@ def create_app(config_path=None, use_dispatcher=True):
     if config_path is None:
         config_path = os.environ.get("BLASTWEB_CONFIG", "blast.yaml")
     try:
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
-    except FileNotFoundError:
-        raise RuntimeError(f"Configuration file not found: {config_path}")
+        config = load_config(config_path)
+    except (FileNotFoundError, ValueError) as e:
+        raise RuntimeError(f"Invalid configuration: {e}")
 
     app.config.update(config)
     register_routes(app)

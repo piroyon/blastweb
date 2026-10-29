@@ -12,3 +12,5 @@ blast.yaml
 .venv/
 .DS_Store
 
+dist/
+*.egg-info/

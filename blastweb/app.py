@@ -2,25 +2,43 @@ from flask import request, render_template, jsonify, current_app, make_response
 import subprocess
 import tempfile
 import os
-import logging
 import yaml
 import shlex
 import re
 
-def register_routes(app):
+PROGRAMS = ['blastn', 'blastp', 'blastx', 'tblastn', 'tblastx']
+MATRIX_PROGRAMS = ['blastp', 'blastx', 'tblastn', 'tblastx']
+DEFAULT_TIMEOUT = 600
 
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger(__name__)
+# Options users may pass via "Additional Options".
+# Anything touching files, output format, remote search or threads is excluded.
+ALLOWED_EXTRA_OPTIONS = {
+    '-task', '-word_size', '-gapopen', '-gapextend', '-reward', '-penalty',
+    '-strand', '-dust', '-seg', '-soft_masking', '-lcase_masking',
+    '-ungapped', '-comp_based_stats', '-threshold', '-perc_identity',
+    '-qcov_hsp_perc', '-max_hsps', '-culling_limit', '-window_size',
+    '-xdrop_ungap', '-xdrop_gap', '-xdrop_gap_final', '-searchsp',
+    '-sum_stats', '-best_hit_overhang', '-best_hit_score_edge',
+    '-min_raw_gapped_score', '-template_type', '-template_length',
+    '-query_gencode', '-db_gencode', '-query_loc', '-matrix',
+    '-max_intron_length', '-use_sw_tback', '-no_greedy', '-subject_besthit',
+}
+
+
+def register_routes(app):
 
     DEFAULT_PROGRAM = 'blastn'
 
     @app.route("/", methods=["GET", "POST"])
     def index():
-        #return "<h1>Hello from Flask</h1>"
         default_extra_args = app.config.get("default_extra_args", "")
         db_dir = app.config.get("blast_db")
         url_prefix = app.config.get("url_prefix", "")
         available_dbs = list_blast_databases(db_dir)
+
+        def form_error(message):
+            return render_template("index.html", error=message,
+                                   default_extra_args=default_extra_args, db_choices=available_dbs)
 
         if request.method == "POST":
             sequence = request.form.get("sequence", "").strip()
@@ -32,15 +50,15 @@ def register_routes(app):
             extra_args = request.form.get("extra_args", "")
 
             if not db:
-                return render_template("index.html", error="No database")
+                return form_error("No database")
 
             if not sequence:
-                return render_template("index.html", error="No query sequence")
+                return form_error("No query sequence")
 
             result_lines, error = run_blast(sequence, program, db, evalue, max_target_seqs, matrix, extra_args)
-            result_text = "\n".join("\t".join(row) for row in result_lines)
             if error:
-                return render_template("index.html", error=error)
+                return form_error(error)
+            result_text = "\n".join("\t".join(row) for row in result_lines)
 
             return render_template("result.html", r_text=result_text, results=result_lines, selected_db=db, url_prefix=url_prefix)
 
@@ -59,34 +77,36 @@ def register_routes(app):
 
     @app.route("/subject/<db>/<subject_id>")
     def get_subject_sequence(db, subject_id):
-        program = "blastdbcmd"
-        cmd_path = get_blast_command(program)
-        db_dir = app.config.get("blast_db")
-        db_path = os.path.join(db_dir, db)
+        text_headers = {"Content-Type": "text/plain; charset=utf-8"}
+        if db not in list_blast_databases(app.config.get("blast_db")):
+            return f"Unknown database: {db}\n", 404, text_headers
+
+        cmd_path = get_blast_command("blastdbcmd")
+        db_path = os.path.join(app.config.get("blast_db"), db)
 
         try:
             result = subprocess.run(
                 [cmd_path, "-db", db_path, "-entry", subject_id],
-                check=True, capture_output=True, text=True
+                check=True, capture_output=True, text=True, timeout=60
             )
-            fasta = result.stdout
         except subprocess.CalledProcessError as e:
-            return f"<p>Failed to fetch entry '{subject_id}' from database '{db}': {e.stderr}</p>", 500
+            return f"Failed to fetch entry '{subject_id}' from database '{db}': {e.stderr}", 500, text_headers
+        except subprocess.TimeoutExpired:
+            return f"Timed out fetching entry '{subject_id}'\n", 504, text_headers
 
-        return f"<pre>{fasta}</pre>"
+        return result.stdout, 200, text_headers
 
 
     @app.route("/api/blast", methods=["POST"])
     def api_blast():
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
         sequence = data.get("sequence", "").strip()
         program = data.get("program", DEFAULT_PROGRAM)
         db = data.get("database", '')
         evalue = data.get("evalue", "1e-3")
         max_target_seqs = data.get("max_target_seqs", "50")
         matrix = data.get("matrix", "")
-        extra_args = data.get("extra_args", "")
-        blast_config = current_app.config["BLAST_CONFIG"]
+        extra_args = data.get("extra_args", current_app.config.get("default_extra_args", ""))
 
         if not sequence:
             return jsonify({"error": "No sequence provided"}), 400
@@ -96,53 +116,92 @@ def register_routes(app):
 
         result_lines, error = run_blast(sequence, program, db, evalue, max_target_seqs, matrix, extra_args)
         if error:
-            return jsonify({"error": error}), 500
+            return jsonify({"error": error}), 400
 
         return jsonify({"results": result_lines})
 
     return app
 
 
+def build_query_fasta(sequence):
+    """Use the input as-is if it is already FASTA (possibly multi-FASTA)."""
+    if sequence.startswith(">"):
+        return sequence + "\n"
+    return ">query\n" + sequence + "\n"
+
+
+def parse_extra_args(extra_args):
+    """Split extra_args and reject options not in ALLOWED_EXTRA_OPTIONS.
+
+    default_extra_args from blast.yaml is set by the admin and trusted as-is.
+    """
+    try:
+        tokens = shlex.split(extra_args)
+    except ValueError as e:
+        return None, f"Failed to parse additional options: {e}"
+
+    if extra_args.strip() == current_app.config.get("default_extra_args", "").strip():
+        return tokens, None
+
+    for token in tokens:
+        # Negative numbers (e.g. "-penalty -3") are values, not options
+        if re.match(r"^-[A-Za-z]", token) and token not in ALLOWED_EXTRA_OPTIONS:
+            return None, f"Option not allowed: {token}"
+    return tokens, None
+
+
 def run_blast(sequence, program, db_name, evalue="1e-5", max_target_seqs="50", matrix="", extra_args=""):
-    blast_path = get_blast_command(program)
+    if program not in PROGRAMS:
+        return [], f"Unknown program: {program}"
+
     db_dir = current_app.config["blast_db"]
+    if db_name not in list_blast_databases(db_dir):
+        return [], f"Unknown database: {db_name}"
+
+    try:
+        float(evalue)
+        int(max_target_seqs)
+    except (TypeError, ValueError):
+        return [], "E-value and Max target seqs must be numbers"
+
+    extra_tokens, error = parse_extra_args(extra_args or "")
+    if error:
+        return [], error
+
+    blast_path = get_blast_command(program)
     db_path = os.path.join(db_dir, db_name)
+    timeout = current_app.config.get("timeout", DEFAULT_TIMEOUT)
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".fa", delete=False) as query_f:
-        query_f.write(">query\n" + sequence)
-        query_f.flush()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        query_path = os.path.join(tmpdir, "query.fa")
+        out_path = os.path.join(tmpdir, "result.out")
+        with open(query_path, "w") as query_f:
+            query_f.write(build_query_fasta(sequence))
 
-        with tempfile.NamedTemporaryFile(mode="r", suffix=".out", delete=False) as out_f:
-            cmd = [
-                blast_path,
-                "-query", query_f.name,
-                "-db", db_path,
-                "-out", out_f.name,
-                "-outfmt", "6",
-                "-evalue", evalue,
-                "-max_target_seqs", max_target_seqs,
-            ]
+        cmd = [
+            blast_path,
+            "-query", query_path,
+            "-db", db_path,
+            "-out", out_path,
+            "-outfmt", "6",
+            "-evalue", str(evalue),
+            "-max_target_seqs", str(max_target_seqs),
+        ]
 
-            if program in ["blastp", "blastx"] and matrix:
-                cmd += ["-matrix", matrix]
+        if program in MATRIX_PROGRAMS and matrix:
+            cmd += ["-matrix", matrix]
 
-            if extra_args:
-                try:
-                    cmd += shlex.split(extra_args)
-                except Exception as e:
-                    return [], f"Failed to parse additional options.: {e}"
-            else:
-                extra_args = current_app.config["default_extra_args"]
+        cmd += extra_tokens
 
-            try:
-                subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                lines = [line.strip().split("\t") for line in out_f]
-                return lines, None
-            except subprocess.CalledProcessError as e:
-                return [], f"BLAST error: {e}"
-            finally:
-                os.unlink(query_f.name)
-                os.unlink(out_f.name)
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=timeout)
+        except subprocess.CalledProcessError as e:
+            return [], f"BLAST error: {e.stderr.strip() or e}"
+        except subprocess.TimeoutExpired:
+            return [], f"BLAST timed out after {timeout} seconds"
+
+        with open(out_path) as out_f:
+            return [line.rstrip("\n").split("\t") for line in out_f if line.strip()], None
 
 
 def load_config(config_path=None):
@@ -155,13 +214,15 @@ def load_config(config_path=None):
         raise FileNotFoundError(f"blast.yaml not found: {path}")
 
     with open(path) as f:
-        config = yaml.safe_load(f)
+        config = yaml.safe_load(f) or {}
 
     if "blast_db" not in config:
         raise ValueError("Need to set 'blast_db' in blast.yaml")
-    if "blast_path" not in config:
+    if not os.path.isdir(config["blast_db"]):
+        raise ValueError(f"blast_db directory not found: {config['blast_db']}")
+    if not config.get("blast_path"):
         config["blast_path"] = ""
-    if "default_extra_args" not in config:
+    if not config.get("default_extra_args"):
         config["default_extra_args"] = ""
 
     return config
@@ -184,7 +245,6 @@ def remove_trailing_digits(s):
 
 def list_blast_databases(db_dir):
     files = os.listdir(db_dir)
-    exts = ('.nin', '.nsq', '.nhr', '.pin', '.psq', '.phr')
     pattern = re.compile(r"^(.+)\.(nin|nsq|nhr|pin|psq|phr)$")
 
     db_names = set()
